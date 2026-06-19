@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AGROMIX Rações — Sistema de Produção</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f4f6f3; --surface:#ffffff; --surface-2:#f8faf7; --line:#e3e8e0;
+  --ink:#1c241b; --muted:#6b7768; --brand:#2f7d32; --brand-d:#22611f; --brand-l:#e7f2e6;
+  --amber:#e3a008; --amber-bg:#fdf3d7; --red:#d23b34; --red-bg:#fbe6e4; --blue:#2563a8; --blue-bg:#e4eefb;
+  --radius:12px; --shadow:0 1px 2px rgba(20,40,15,.06),0 6px 20px rgba(20,40,15,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Archivo,sans-serif;margin:0}
+.mono{font-family:'IBM Plex Mono',monospace}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px}
+a{color:var(--brand-d)}
+
+/* ---------- LOGIN ---------- */
+#login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:radial-gradient(1200px 600px at 70% -10%,#dcebd9,transparent),var(--bg)}
+.login-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);
+  width:100%;max-width:380px;padding:32px}
+.brand{display:flex;align-items:center;gap:11px;margin-bottom:6px}
+.logo{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--brand),var(--brand-d));
+  display:grid;place-items:center;color:#fff;font-family:Archivo;font-weight:800;font-size:20px}
+.brand .t1{font-family:Archivo;font-weight:800;font-size:17px;letter-spacing:-.01em}
+.brand .t2{font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+.login-card h2{font-size:19px;margin:18px 0 2px}
+.login-card p.sub{color:var(--muted);margin:0 0 20px;font-size:13px}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink);outline:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-l);background:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-radius:9px;border:1px solid transparent;font-weight:600;font-size:14px;transition:.15s}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand-d)}
+.btn-ghost{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-danger{background:var(--red-bg);color:var(--red);border-color:#f3c9c6}
+.btn-danger:hover{background:#f8d8d6}
+.btn-block{width:100%}
+.btn-sm{padding:6px 11px;font-size:13px;border-radius:8px}
+.hint{margin-top:14px;font-size:12px;color:var(--muted);background:var(--surface-2);border:1px dashed var(--line);border-radius:9px;padding:9px 11px;text-align:center}
+
+/* ---------- APP SHELL ---------- */
+#app{display:none;min-height:100%}
+.shell{display:flex;min-height:100vh}
+.sidebar{width:236px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.sidebar .head{padding:18px 18px 14px;border-bottom:1px solid var(--line)}
+.nav{padding:12px 10px;flex:1;overflow:auto}
+.nav .group{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:12px 12px 6px}
+.nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;color:var(--ink);text-decoration:none;font-weight:500;margin-bottom:2px;cursor:pointer}
+.nav a:hover{background:var(--surface-2)}
+.nav a.active{background:var(--brand-l);color:var(--brand-d);font-weight:600}
+.nav a .ic{width:18px;text-align:center;font-size:15px}
+.sidebar .foot{padding:12px;border-top:1px solid var(--line)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:60px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:sticky;top:0;z-index:5}
+.topbar .title{font-family:Archivo;font-weight:700;font-size:17px}
+.hamburger{display:none;background:none;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:16px}
+.content{padding:22px;max-width:1280px;width:100%;margin:0 auto}
+
+/* ---------- COMPONENTS ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:13px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;box-shadow:var(--shadow)}
+.kpi .lab{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.kpi .val{font-family:Archivo;font-weight:800;font-size:25px;margin-top:5px;letter-spacing:-.02em}
+.kpi .val small{font-size:13px;font-weight:600;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px}
+.card .ch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.card .ch h3{font-size:16px}
+.card .cb{padding:6px 0}
+.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.toolbar input,.toolbar select{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--brand);outline:none;background:#fff}
+.search{min-width:190px}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;background:var(--surface-2);position:sticky;top:0}
+tbody tr:hover{background:var(--surface-2)}
+td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600}
+.b-prog{background:var(--blue-bg);color:var(--blue)}
+.b-nprog{background:var(--amber-bg);color:#9a6c04}
+.b-cat{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.row-actions{display:flex;gap:6px}
+.icon-btn{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:5px 8px;font-size:13px;color:var(--muted)}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink)}
+.icon-btn.del:hover{color:var(--red);border-color:#f3c9c6}
+.empty{padding:38px 18px;text-align:center;color:var(--muted)}
+.muted{color:var(--muted)}
+.tabs{display:flex;gap:6px;padding:0 18px;border-bottom:1px solid var(--line)}
+.tab{padding:11px 13px;border:none;background:none;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{color:var(--brand-d);border-bottom-color:var(--brand)}
+
+/* ---------- MODAL ---------- */
+.overlay{position:fixed;inset:0;background:rgba(20,30,15,.42);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow:auto}
+.overlay.show{display:flex}
+.modal{background:var(--surface);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);width:100%;max-width:620px;animation:pop .14s ease}
+@keyframes pop{from{transform:translateY(8px) scale(.99);opacity:.7}to{transform:none;opacity:1}}
+.modal .mh{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
+.modal .mh h3{font-size:17px}
+.modal .mb{padding:18px 20px}
+.modal .mf{display:flex;justify-content:flex-end;gap:9px;padding:14px 20px;border-top:1px solid var(--line)}
+.x{background:none;border:none;font-size:22px;color:var(--muted);line-height:1;padding:2px 6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}
+.computed{background:var(--brand-l);border:1px solid #cfe3cd;border-radius:9px;padding:10px 13px;display:flex;gap:20px;flex-wrap:wrap;margin-top:4px}
+.computed div{font-size:12px;color:var(--brand-d)}
+.computed b{font-family:'IBM Plex Mono',monospace;font-size:15px;display:block;color:var(--ink)}
+.full{grid-column:1/-1}
+
+/* ---------- TOAST ---------- */
+#toasts{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:9px;z-index:100}
+.toast{background:var(--ink);color:#fff;padding:11px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:slide .2s ease}
+.toast.ok{background:var(--brand-d)}
+.toast.err{background:var(--red)}
+@keyframes slide{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+@media(max-width:860px){
+  .sidebar{position:fixed;z-index:40;left:0;top:0;transform:translateX(-100%);transition:.2s;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .hamburger{display:inline-block}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:35;display:none}
+  .scrim.show{display:block}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <div class="login-card">
+    <div class="brand"><div class="logo">A</div><div><div class="t1">AGROMIX Rações</div><div class="t2">Sistema de Produção</div></div></div>
+    <h2>Entrar</h2>
+    <p class="sub">Acesse o controle de produção e paradas.</p>
+    <div class="field"><label>Usuário</label><input id="lg-user" autocomplete="username" placeholder="usuário"></div>
+    <div class="field"><label>Senha</label><input id="lg-pass" type="password" autocomplete="current-password" placeholder="senha" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-primary btn-block" onclick="doLogin()">Entrar</button>
+    <div class="hint">Acesso padrão: <b>admin</b> / <b>agromix2026</b></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="head"><div class="brand"><div class="logo">A</div><div><div class="t1" style="font-size:15px">AGROMIX Rações</div><div class="t2">Produção</div></div></div></div>
+      <nav class="nav" id="nav">
+        <div class="group">Operação</div>
+        <a data-view="inicio"><span class="ic">📊</span> Início</a>
+        <a data-view="producao"><span class="ic">🏭</span> Produção</a>
+        <a data-view="paradas"><span class="ic">🛑</span> Paradas</a>
+        <div class="group">Base</div>
+        <a data-view="cadastros"><span class="ic">📦</span> Cadastros</a>
+      </nav>
+      <div class="foot"><button class="btn btn-ghost btn-block" onclick="logout()">↩ Sair</button></div>
+    </aside>
+    <div class="scrim" id="scrim" onclick="toggleSidebar(false)"></div>
+    <div class="main">
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:12px">
+          <button class="hamburger" onclick="toggleSidebar()">☰</button>
+          <span class="title" id="viewTitle">Início</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="exportExcel()">⬇ Exportar Excel</button>
+      </div>
+      <div class="content" id="view"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div id="toasts"></div>
+
+<script>
+/* ====================== CONFIG SUPABASE ======================
+   Mesmo projeto do app de absenteísmo. Só URL + chave ANON (pública).
+   NUNCA coloque a service_role aqui.                                  */
+const SUPABASE_URL      = "https://iwravbxhewlrdurodfnu.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3cmF2YnhoZXdscmR1cm9kZm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2NzM1MTcsImV4cCI6MjA5NzI0OTUxN30.tFVy0gVVt3rJhhXBOJBnan0kyqEx9zwhVYAzdqOXzBE";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ====================== DADOS / SUPABASE ====================== */
+const PK = {prod_produtos:"codigo", prod_listas:"id", prod_producao:"id", prod_paradas:"id"};
+const dnull = v => (v===""||v==null)?null:v;
+const dstr  = v => v==null?"":v;
+function toRow(t,o){
+  if(t==="prod_produtos") return {codigo:o.codigo,descricao:o.descricao,peso:dnull(o.peso),categoria:o.categoria,familia:o.familia};
+  if(t==="prod_listas")   return {id:o.id,categoria:o.categoria,valor:o.valor};
+  if(t==="prod_producao") return {id:o.id,dia:dnull(o.dia),operacao:o.operacao,hora_ini:o.hora_ini,hora_fim:o.hora_fim,codigo:o.codigo,descricao:o.descricao,categoria:o.categoria,familia:o.familia,peso:dnull(o.peso),reprocesso:dnull(o.reprocesso),obs:o.obs};
+  if(t==="prod_paradas")  return {id:o.id,dia:dnull(o.dia),hora_ini:o.hora_ini,hora_fim:o.hora_fim,operacao:o.operacao,tipo_parada:o.tipo_parada,motivo:o.motivo,causa:o.causa,obs:o.obs};
+}
+function toApp(t,r){
+  if(t==="prod_produtos") return {codigo:dstr(r.codigo),descricao:dstr(r.descricao),peso:r.peso==null?"":r.peso,categoria:dstr(r.categoria),familia:dstr(r.familia)};
+  if(t==="prod_listas")   return {id:dstr(r.id),categoria:dstr(r.categoria),valor:dstr(r.valor)};
+  if(t==="prod_producao") return {id:dstr(r.id),dia:dstr(r.dia),operacao:dstr(r.operacao),hora_ini:dstr(r.hora_ini),hora_fim:dstr(r.hora_fim),codigo:dstr(r.codigo),descricao:dstr(r.descricao),categoria:dstr(r.categoria),familia:dstr(r.familia),peso:r.peso==null?"":r.peso,reprocesso:r.reprocesso==null?"":r.reprocesso,obs:dstr(r.obs)};
+  if(t==="prod_paradas")  return {id:dstr(r.id),dia:dstr(r.dia),hora_ini:dstr(r.hora_ini),hora_fim:dstr(r.hora_fim),operacao:dstr(r.operacao),tipo_parada:dstr(r.tipo_parada),motivo:dstr(r.motivo),causa:dstr(r.causa),obs:dstr(r.obs)};
+}
+const MEM = {auth:{user:"admin",pass:btoa("agromix2026")}, session:null};
+const DB = {
+  async load(t){
+    try{ const {data,error}=await sb.from(t).select("*"); if(error){console.error("select "+t,error);return [];} return (data||[]).map(r=>toApp(t,r)); }
+    catch(e){ console.error("select "+t,e); return []; }
+  },
+  async save(t,arr){
+    const pk=PK[t];
+    try{
+      const rows=(arr||[]).map(o=>toRow(t,o));
+      if(rows.length){ const {error}=await sb.from(t).upsert(rows,{onConflict:pk}); if(error)console.error("upsert "+t,error); }
+      const keep=rows.map(r=>String(r[pk]));
+      const listStr="("+(keep.length?keep:["__none__"]).map(v=>JSON.stringify(v)).join(",")+")";
+      const {error:de}=await sb.from(t).delete().not(pk,"in",listStr); if(de)console.error("del "+t,de);
+    }catch(e){ console.error("save "+t,e); }
+  }
+};
+
+/* ====================== ESTADO ====================== */
+const STATE = {prod_produtos:[],prod_listas:[],prod_producao:[],prod_paradas:[],view:"inicio",fProdMes:"",fProdQ:"",fParMes:"",fParQ:"",cadTab:"produtos"};
+
+/* ====================== HELPERS ====================== */
+const $=s=>document.querySelector(s);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function fmtDate(iso){ if(!iso)return""; const p=iso.split("-"); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:iso; }
+function mesKey(iso){ return iso?iso.slice(0,7):""; }
+function nf(n,d=0){ if(n===""||n==null||isNaN(n))return""; return Number(n).toLocaleString("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function hMin(t){ if(!t)return null; const m=String(t).match(/^(\d{1,2}):(\d{2})/); return m?(+m[1]*60+ +m[2]):null; }
+function horasDec(ini,fim){ const a=hMin(ini),b=hMin(fim); if(a==null||b==null)return null; let d=b-a; if(d<0)d+=1440; return d/60; }
+function horasFrac(ini,fim){ const h=horasDec(ini,fim); if(h==null)return""; const tot=Math.round(h*60); return `${Math.floor(tot/60)}:${String(tot%60).padStart(2,"0")}`; }
+function taxa(peso,ini,fim){ const h=horasDec(ini,fim); if(h==null||h===0||peso===""||peso==null)return""; return Math.round(peso/h); }
+function pctReproc(peso,rep){ if(peso===""||peso==0||peso==null||rep===""||rep==null||rep==0)return""; return Math.round(rep/peso*10000)/100; }
+function semana(iso){ if(!iso)return""; const d=new Date(iso+"T00:00:00"); const onejan=new Date(d.getFullYear(),0,1); const day=(onejan.getDay()||7); const w=Math.ceil(((d-onejan)/86400000+day)/7); return "Sem "+String(w).padStart(2,"0"); }
+function listVals(cat){ return STATE.prod_listas.filter(l=>l.categoria===cat).map(l=>l.valor); }
+function toast(msg,type=""){ const el=document.createElement("div"); el.className="toast "+type; el.textContent=msg; $("#toasts").appendChild(el); setTimeout(()=>el.remove(),3000); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function closeModal(){ $("#overlay").classList.remove("show"); $("#modal").innerHTML=""; }
+function toggleSidebar(force){ const o=force===undefined?!$("#sidebar").classList.contains("open"):force; $("#sidebar").classList.toggle("open",o); $("#scrim").classList.toggle("show",o); }
+
+/* ====================== AUTH ====================== */
+async function doLogin(){
+  const u=$("#lg-user").value.trim(), p=$("#lg-pass").value;
+  if(u===MEM.auth.user && btoa(p)===MEM.auth.pass){ MEM.session=Date.now(); $("#login").style.display="none"; $("#app").style.display="block"; await boot(); }
+  else toast("Usuário ou senha incorretos.","err");
+}
+function logout(){ MEM.session=null; $("#app").style.display="none"; $("#login").style.display="flex"; $("#lg-pass").value=""; }
+
+/* ====================== NAV ====================== */
+const TITLES={inicio:"Início",producao:"Controle de Produção",paradas:"Controle de Paradas",cadastros:"Cadastros"};
+function go(v){ STATE.view=v; document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active",a.dataset.view===v)); $("#viewTitle").textContent=TITLES[v]; toggleSidebar(false); render(); }
+document.querySelectorAll("#nav a").forEach(a=>a.onclick=()=>go(a.dataset.view));
+
+/* ====================== RENDER ====================== */
+function render(){
+  if(STATE.view==="inicio")return renderInicio();
+  if(STATE.view==="producao")return renderProducao();
+  if(STATE.view==="paradas")return renderParadas();
+  if(STATE.view==="cadastros")return renderCadastros();
+}
+
+function renderInicio(){
+  const prod=STATE.prod_producao, par=STATE.prod_paradas;
+  const totKg=prod.reduce((s,r)=>s+(+r.peso||0),0);
+  const hProd=prod.reduce((s,r)=>s+(horasDec(r.hora_ini,r.hora_fim)||0),0);
+  const hPar=par.reduce((s,r)=>s+(horasDec(r.hora_ini,r.hora_fim)||0),0);
+  const tx=hProd>0?Math.round(totKg/hProd):0;
+  const disp=(hProd+hPar)>0?(hProd/(hProd+hPar)*100):0;
+  $("#view").innerHTML=`
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Produção total</div><div class="val">${nf(totKg)} <small>kg</small></div></div>
+      <div class="kpi"><div class="lab">Horas produtivas</div><div class="val">${nf(hProd,1)} <small>h</small></div></div>
+      <div class="kpi"><div class="lab">Taxa média</div><div class="val">${nf(tx)} <small>kg/h</small></div></div>
+      <div class="kpi"><div class="lab">Horas paradas</div><div class="val">${nf(hPar,1)} <small>h</small></div></div>
+      <div class="kpi"><div class="lab">Disponibilidade</div><div class="val">${nf(disp,1)}<small>%</small></div></div>
+      <div class="kpi"><div class="lab">Registros</div><div class="val">${prod.length}<small> prod · ${par.length} par</small></div></div>
+    </div>
+    <div class="card"><div class="ch"><h3>Últimas produções</h3><button class="btn btn-primary btn-sm" onclick="go('producao')">Ver todas →</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Peso (kg)</th><th class="num">Horas</th></tr></thead><tbody>
+      ${[...prod].sort((a,b)=>(b.dia||"").localeCompare(a.dia||"")).slice(0,6).map(r=>`<tr><td>${fmtDate(r.dia)}</td><td>${esc(r.operacao)}</td><td>${esc(r.descricao)}</td><td class="num">${nf(r.peso)}</td><td class="num">${nf(horasDec(r.hora_ini,r.hora_fim),1)}</td></tr>`).join("")||`<tr><td colspan="5" class="empty">Sem registros ainda.</td></tr>`}
+      </tbody></table></div></div>`;
+}
+
+/* -------- PRODUÇÃO -------- */
+function mesesDe(arr){ return [...new Set(arr.map(r=>mesKey(r.dia)).filter(Boolean))].sort().reverse(); }
+function renderProducao(){
+  const meses=mesesDe(STATE.prod_producao);
+  let rows=STATE.prod_producao.slice().sort((a,b)=>(b.dia||"").localeCompare(a.dia||"")||(b.hora_ini||"").localeCompare(a.hora_ini||""));
+  if(STATE.fProdMes) rows=rows.filter(r=>mesKey(r.dia)===STATE.fProdMes);
+  if(STATE.fProdQ){ const q=STATE.fProdQ.toLowerCase(); rows=rows.filter(r=>(r.descricao+" "+r.operacao+" "+r.codigo).toLowerCase().includes(q)); }
+  $("#view").innerHTML=`
+    <div class="card">
+      <div class="ch">
+        <h3>Produção diária <span class="muted" style="font-weight:400;font-size:13px">(${rows.length})</span></h3>
+        <div class="toolbar">
+          <select onchange="STATE.fProdMes=this.value;renderProducao()"><option value="">Todos os meses</option>${meses.map(m=>`<option ${m===STATE.fProdMes?"selected":""}>${m}</option>`).join("")}</select>
+          <input class="search" placeholder="Buscar produto/operação…" value="${esc(STATE.fProdQ)}" oninput="STATE.fProdQ=this.value;clearTimeout(window._t);window._t=setTimeout(renderProducao,200)">
+          <button class="btn btn-primary btn-sm" onclick="formProducao()">+ Lançar produção</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th>Categoria</th><th class="num">Peso (kg)</th><th class="num">Horas</th><th class="num">Taxa</th><th class="num">% Rep.</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td>${fmtDate(r.dia)}</td>
+          <td>${esc(r.operacao)}</td>
+          <td>${esc(r.descricao)}</td>
+          <td><span class="badge b-cat">${esc(r.categoria)||"—"}</span></td>
+          <td class="num">${nf(r.peso)}</td>
+          <td class="num">${nf(horasDec(r.hora_ini,r.hora_fim),1)}</td>
+          <td class="num">${nf(taxa(r.peso,r.hora_ini,r.hora_fim))}</td>
+          <td class="num">${pctReproc(r.peso,r.reprocesso)===""?"":nf(pctReproc(r.peso,r.reprocesso),2)+"%"}</td>
+          <td><div class="row-actions"><button class="icon-btn" onclick="formProducao('${r.id}')">✎</button><button class="icon-btn del" onclick="delRec('prod_producao','${r.id}')">🗑</button></div></td>
+        </tr>`).join("")||`<tr><td colspan="9" class="empty">Nenhuma produção. Clique em “Lançar produção”.</td></tr>`}</tbody>
+      </table></div>
+    </div>`;
+}
+function formProducao(id){
+  const r=id?STATE.prod_producao.find(x=>x.id===id):{id:"",dia:new Date().toISOString().slice(0,10),operacao:"",hora_ini:"",hora_fim:"",codigo:"",descricao:"",categoria:"",familia:"",peso:"",reprocesso:"",obs:""};
+  const ops=listVals("operacao");
+  const prodOpts=STATE.prod_produtos.slice().sort((a,b)=>a.descricao.localeCompare(b.descricao)).map(p=>`<option value="${esc(p.descricao)}" ${p.descricao===r.descricao?"selected":""}>${esc(p.descricao)}</option>`).join("");
+  $("#modal").innerHTML=`
+    <div class="mh"><h3>${id?"Editar":"Lançar"} produção</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <div class="grid3">
+        <div class="field"><label>Data</label><input type="date" id="f-dia" value="${esc(r.dia)}" oninput="prodCalc()"></div>
+        <div class="field"><label>Hora inicial</label><input type="time" id="f-ini" value="${esc(r.hora_ini)}" oninput="prodCalc()"></div>
+        <div class="field"><label>Hora final</label><input type="time" id="f-fim" value="${esc(r.hora_fim)}" oninput="prodCalc()"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Operação</label><input id="f-op" list="dl-op" value="${esc(r.operacao)}" placeholder="selecione ou digite"><datalist id="dl-op">${ops.map(o=>`<option value="${esc(o)}">`).join("")}</datalist></div>
+        <div class="field"><label>Peso (kg)</label><input type="number" id="f-peso" value="${esc(r.peso)}" step="any" oninput="prodCalc()"></div>
+      </div>
+      <div class="field"><label>Produto (descrição)</label><select id="f-prod" onchange="prodFill()"><option value="">— selecione —</option>${prodOpts}</select></div>
+      <div class="grid3">
+        <div class="field"><label>Código</label><input id="f-cod" value="${esc(r.codigo)}" readonly></div>
+        <div class="field"><label>Categoria</label><input id="f-cat" value="${esc(r.categoria)}" readonly></div>
+        <div class="field"><label>Família</label><input id="f-fam" value="${esc(r.familia)}" readonly></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Reprocesso (kg)</label><input type="number" id="f-rep" value="${esc(r.reprocesso)}" step="any" oninput="prodCalc()"></div>
+        <div class="field"><label>Observação</label><input id="f-obs" value="${esc(r.obs)}"></div>
+      </div>
+      <div class="computed" id="f-calc"></div>
+    </div>
+    <div class="mf"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveProducao('${id||""}')">Salvar</button></div>`;
+  $("#overlay").classList.add("show"); prodCalc();
+}
+function prodFill(){ const d=$("#f-prod").value; const p=STATE.prod_produtos.find(x=>x.descricao===d); $("#f-cod").value=p?p.codigo:""; $("#f-cat").value=p?p.categoria:""; $("#f-fam").value=p?(p.familia||""):""; }
+function prodCalc(){
+  const ini=$("#f-ini").value,fim=$("#f-fim").value,peso=$("#f-peso").value===""?"":+$("#f-peso").value,rep=$("#f-rep").value===""?"":+$("#f-rep").value;
+  const h=horasDec(ini,fim);
+  $("#f-calc").innerHTML=`<div>Horas (dec.)<b>${h==null?"—":nf(h,2)}</b></div><div>Horas (frac.)<b>${horasFrac(ini,fim)||"—"}</b></div><div>Taxa (kg/h)<b>${taxa(peso,ini,fim)===""?"—":nf(taxa(peso,ini,fim))}</b></div><div>% Reprocesso<b>${pctReproc(peso,rep)===""?"—":nf(pctReproc(peso,rep),2)+"%"}</b></div><div>Mês<b>${mesKey($("#f-dia").value)||"—"}</b></div>`;
+}
+async function saveProducao(id){
+  const desc=$("#f-prod").value, p=STATE.prod_produtos.find(x=>x.descricao===desc)||{};
+  const rec={id:id||uid(),dia:$("#f-dia").value,operacao:$("#f-op").value.trim(),hora_ini:$("#f-ini").value,hora_fim:$("#f-fim").value,
+    descricao:desc,codigo:p.codigo||"",categoria:p.categoria||"",familia:p.familia||"",
+    peso:$("#f-peso").value===""?"":+$("#f-peso").value,reprocesso:$("#f-rep").value===""?"":+$("#f-rep").value,obs:$("#f-obs").value.trim()};
+  if(!rec.dia){ toast("Informe a data.","err"); return; }
+  const i=STATE.prod_producao.findIndex(x=>x.id===rec.id);
+  if(i>=0)STATE.prod_producao[i]=rec; else STATE.prod_producao.push(rec);
+  closeModal(); renderProducao(); toast("Produção salva.","ok"); await DB.save("prod_producao",STATE.prod_producao);
+}
+
+/* -------- PARADAS -------- */
+function renderParadas(){
+  const meses=mesesDe(STATE.prod_paradas);
+  let rows=STATE.prod_paradas.slice().sort((a,b)=>(b.dia||"").localeCompare(a.dia||"")||(b.hora_ini||"").localeCompare(a.hora_ini||""));
+  if(STATE.fParMes) rows=rows.filter(r=>mesKey(r.dia)===STATE.fParMes);
+  if(STATE.fParQ){ const q=STATE.fParQ.toLowerCase(); rows=rows.filter(r=>(r.operacao+" "+r.motivo+" "+r.causa+" "+r.tipo_parada).toLowerCase().includes(q)); }
+  $("#view").innerHTML=`
+    <div class="card">
+      <div class="ch">
+        <h3>Paradas <span class="muted" style="font-weight:400;font-size:13px">(${rows.length})</span></h3>
+        <div class="toolbar">
+          <select onchange="STATE.fParMes=this.value;renderParadas()"><option value="">Todos os meses</option>${meses.map(m=>`<option ${m===STATE.fParMes?"selected":""}>${m}</option>`).join("")}</select>
+          <input class="search" placeholder="Buscar motivo/causa…" value="${esc(STATE.fParQ)}" oninput="STATE.fParQ=this.value;clearTimeout(window._t2);window._t2=setTimeout(renderParadas,200)">
+          <button class="btn btn-primary btn-sm" onclick="formParada()">+ Registrar parada</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Data</th><th>Início</th><th>Fim</th><th>Operação</th><th>Tipo</th><th>Motivo</th><th>Causa</th><th class="num">Horas</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td>${fmtDate(r.dia)}</td><td class="mono">${esc(r.hora_ini)}</td><td class="mono">${esc(r.hora_fim)}</td>
+          <td>${esc(r.operacao)}</td>
+          <td>${r.tipo_parada?`<span class="badge ${r.tipo_parada.indexOf("NÃO")===0?"b-nprog":"b-prog"}">${esc(r.tipo_parada)}</span>`:"—"}</td>
+          <td>${esc(r.motivo)||"—"}</td><td>${esc(r.causa)||"—"}</td>
+          <td class="num">${nf(horasDec(r.hora_ini,r.hora_fim),1)}</td>
+          <td><div class="row-actions"><button class="icon-btn" onclick="formParada('${r.id}')">✎</button><button class="icon-btn del" onclick="delRec('prod_paradas','${r.id}')">🗑</button></div></td>
+        </tr>`).join("")||`<tr><td colspan="9" class="empty">Nenhuma parada registrada.</td></tr>`}</tbody>
+      </table></div>
+    </div>`;
+}
+function formParada(id){
+  const r=id?STATE.prod_paradas.find(x=>x.id===id):{id:"",dia:new Date().toISOString().slice(0,10),hora_ini:"",hora_fim:"",operacao:"",tipo_parada:"",motivo:"",causa:"",obs:""};
+  const ops=listVals("operacao"),tipos=listVals("tipo_parada"),mot=listVals("motivo"),cau=listVals("causa");
+  $("#modal").innerHTML=`
+    <div class="mh"><h3>${id?"Editar":"Registrar"} parada</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <div class="grid3">
+        <div class="field"><label>Data</label><input type="date" id="g-dia" value="${esc(r.dia)}" oninput="parCalc()"></div>
+        <div class="field"><label>Hora inicial</label><input type="time" id="g-ini" value="${esc(r.hora_ini)}" oninput="parCalc()"></div>
+        <div class="field"><label>Hora final</label><input type="time" id="g-fim" value="${esc(r.hora_fim)}" oninput="parCalc()"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Operação</label><input id="g-op" list="dl-gop" value="${esc(r.operacao)}" placeholder="selecione ou digite"><datalist id="dl-gop">${ops.map(o=>`<option value="${esc(o)}">`).join("")}</datalist></div>
+        <div class="field"><label>Tipo de parada</label><select id="g-tipo"><option value="">—</option>${tipos.map(t=>`<option ${t===r.tipo_parada?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Motivo</label><input id="g-mot" list="dl-mot" value="${esc(r.motivo)}" placeholder="selecione ou digite"><datalist id="dl-mot">${mot.map(o=>`<option value="${esc(o)}">`).join("")}</datalist></div>
+        <div class="field"><label>Detalhe / causa</label><input id="g-cau" list="dl-cau" value="${esc(r.causa)}" placeholder="selecione ou digite"><datalist id="dl-cau">${cau.map(o=>`<option value="${esc(o)}">`).join("")}</datalist></div>
+      </div>
+      <div class="field"><label>Observação</label><input id="g-obs" value="${esc(r.obs)}"></div>
+      <div class="computed" id="g-calc"></div>
+    </div>
+    <div class="mf"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveParada('${id||""}')">Salvar</button></div>`;
+  $("#overlay").classList.add("show"); parCalc();
+}
+function parCalc(){ const ini=$("#g-ini").value,fim=$("#g-fim").value,h=horasDec(ini,fim); $("#g-calc").innerHTML=`<div>Horas (dec.)<b>${h==null?"—":nf(h,2)}</b></div><div>Horas (frac.)<b>${horasFrac(ini,fim)||"—"}</b></div><div>Mês<b>${mesKey($("#g-dia").value)||"—"}</b></div>`; }
+async function saveParada(id){
+  const rec={id:id||uid(),dia:$("#g-dia").value,hora_ini:$("#g-ini").value,hora_fim:$("#g-fim").value,operacao:$("#g-op").value.trim(),tipo_parada:$("#g-tipo").value,motivo:$("#g-mot").value.trim(),causa:$("#g-cau").value.trim(),obs:$("#g-obs").value.trim()};
+  if(!rec.dia){ toast("Informe a data.","err"); return; }
+  const i=STATE.prod_paradas.findIndex(x=>x.id===rec.id);
+  if(i>=0)STATE.prod_paradas[i]=rec; else STATE.prod_paradas.push(rec);
+  closeModal(); renderParadas(); toast("Parada salva.","ok"); await DB.save("prod_paradas",STATE.prod_paradas);
+}
+
+/* -------- CADASTROS -------- */
+function renderCadastros(){
+  $("#view").innerHTML=`
+    <div class="card">
+      <div class="tabs">
+        <button class="tab ${STATE.cadTab==="produtos"?"active":""}" onclick="STATE.cadTab='produtos';renderCadastros()">Produtos (${STATE.prod_produtos.length})</button>
+        <button class="tab ${STATE.cadTab==="listas"?"active":""}" onclick="STATE.cadTab='listas';renderCadastros()">Listas operacionais</button>
+      </div>
+      <div id="cad-body"></div>
+    </div>`;
+  if(STATE.cadTab==="produtos")renderCadProdutos(); else renderCadListas();
+}
+function renderCadProdutos(){
+  const rows=STATE.prod_produtos.slice().sort((a,b)=>a.descricao.localeCompare(b.descricao));
+  $("#cad-body").innerHTML=`
+    <div class="ch" style="border-top:1px solid var(--line)"><span class="muted">${rows.length} produtos cadastrados</span><button class="btn btn-primary btn-sm" onclick="formProduto()">+ Novo produto</button></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Código</th><th>Descrição</th><th class="num">Peso (kg)</th><th>Categoria</th><th>Família</th><th></th></tr></thead>
+      <tbody>${rows.map(p=>`<tr><td class="mono">${esc(p.codigo)}</td><td>${esc(p.descricao)}</td><td class="num">${nf(p.peso)}</td><td><span class="badge b-cat">${esc(p.categoria)}</span></td><td>${esc(p.familia)}</td>
+        <td><div class="row-actions"><button class="icon-btn" onclick="formProduto('${esc(p.codigo)}')">✎</button><button class="icon-btn del" onclick="delProduto('${esc(p.codigo)}')">🗑</button></div></td></tr>`).join("")||`<tr><td colspan="6" class="empty">Nenhum produto.</td></tr>`}</tbody>
+    </table></div>`;
+}
+function formProduto(cod){
+  const r=cod?STATE.prod_produtos.find(x=>x.codigo===cod):{codigo:"",descricao:"",peso:"",categoria:"",familia:""};
+  const cats=[...new Set(STATE.prod_produtos.map(p=>p.categoria).filter(Boolean))];
+  const fams=[...new Set(STATE.prod_produtos.map(p=>p.familia).filter(Boolean))];
+  $("#modal").innerHTML=`
+    <div class="mh"><h3>${cod?"Editar":"Novo"} produto</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <div class="grid2">
+        <div class="field"><label>Código</label><input id="p-cod" value="${esc(r.codigo)}" ${cod?"readonly":""} placeholder="ex: 499 ou PRD00048"></div>
+        <div class="field"><label>Peso (kg)</label><input type="number" id="p-peso" value="${esc(r.peso)}" step="any"></div>
+      </div>
+      <div class="field full"><label>Descrição</label><input id="p-desc" value="${esc(r.descricao)}" placeholder="nome completo do produto"></div>
+      <div class="grid2">
+        <div class="field"><label>Categoria</label><input id="p-cat" list="dl-cat" value="${esc(r.categoria)}"><datalist id="dl-cat">${cats.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+        <div class="field"><label>Família</label><input id="p-fam" list="dl-fam" value="${esc(r.familia)}"><datalist id="dl-fam">${fams.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveProduto('${cod||""}')">Salvar</button></div>`;
+  $("#overlay").classList.add("show");
+}
+async function saveProduto(cod){
+  const codigo=$("#p-cod").value.trim();
+  if(!codigo){ toast("Informe o código.","err"); return; }
+  if(!cod && STATE.prod_produtos.some(p=>p.codigo===codigo)){ toast("Já existe um produto com esse código.","err"); return; }
+  const rec={codigo,descricao:$("#p-desc").value.trim(),peso:$("#p-peso").value===""?"":+$("#p-peso").value,categoria:$("#p-cat").value.trim(),familia:$("#p-fam").value.trim()};
+  if(!rec.descricao){ toast("Informe a descrição.","err"); return; }
+  const i=STATE.prod_produtos.findIndex(x=>x.codigo===(cod||codigo));
+  if(i>=0)STATE.prod_produtos[i]=rec; else STATE.prod_produtos.push(rec);
+  closeModal(); renderCadastros(); toast("Produto salvo.","ok"); await DB.save("prod_produtos",STATE.prod_produtos);
+}
+async function delProduto(cod){
+  if(!confirm("Excluir este produto?"))return;
+  STATE.prod_produtos=STATE.prod_produtos.filter(p=>p.codigo!==cod);
+  renderCadastros(); toast("Produto excluído."); await DB.save("prod_produtos",STATE.prod_produtos);
+}
+const CATLAB={operacao:"Operações",tipo_parada:"Tipos de parada",motivo:"Motivos de parada",causa:"Detalhes / causas"};
+function renderCadListas(){
+  $("#cad-body").innerHTML=`<div style="padding:16px 18px">${Object.keys(CATLAB).map(cat=>{
+    const vals=STATE.prod_listas.filter(l=>l.categoria===cat);
+    return `<div class="card" style="box-shadow:none;margin-bottom:14px">
+      <div class="ch"><h3 style="font-size:14px">${CATLAB[cat]} <span class="muted" style="font-weight:400">(${vals.length})</span></h3>
+        <div class="toolbar"><input id="nl-${cat}" placeholder="adicionar…" style="min-width:170px" onkeydown="if(event.key==='Enter')addLista('${cat}')"><button class="btn btn-ghost btn-sm" onclick="addLista('${cat}')">+ Adicionar</button></div></div>
+      <div class="cb" style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
+        ${vals.map(l=>`<span class="badge b-cat" style="display:inline-flex;align-items:center;gap:7px;padding:5px 10px">${esc(l.valor)} <button class="x" style="font-size:15px;padding:0 2px" onclick="delLista('${esc(l.id)}')">×</button></span>`).join("")||`<span class="muted">Vazio</span>`}
+      </div></div>`;
+  }).join("")}</div>`;
+}
+async function addLista(cat){
+  const inp=$("#nl-"+cat), v=inp.value.trim(); if(!v)return;
+  const id=cat+"|"+v;
+  if(STATE.prod_listas.some(l=>l.id===id)){ toast("Já existe.","err"); return; }
+  STATE.prod_listas.push({id,categoria:cat,valor:v}); inp.value=""; renderCadastros(); await DB.save("prod_listas",STATE.prod_listas);
+}
+async function delLista(id){
+  STATE.prod_listas=STATE.prod_listas.filter(l=>l.id!==id); renderCadastros(); await DB.save("prod_listas",STATE.prod_listas);
+}
+
+/* -------- AÇÕES COMUNS -------- */
+async function delRec(table,id){
+  if(!confirm("Excluir este registro?"))return;
+  STATE[table]=STATE[table].filter(x=>x.id!==id);
+  if(table==="prod_producao")renderProducao(); else renderParadas();
+  toast("Registro excluído."); await DB.save(table,STATE[table]);
+}
+
+/* -------- EXPORT EXCEL -------- */
+function exportExcel(){
+  try{
+    const wb=XLSX.utils.book_new();
+    const prod=STATE.prod_producao.slice().sort((a,b)=>(a.dia||"").localeCompare(b.dia||""));
+    const aoaP=[["DIA","OPERAÇÃO","HORA INICIAL","HORA FINAL","HORAS (dec.)","HORAS (frac.)","CÓDIGO","DESCRIÇÃO","CATEGORIA","FAMÍLIA","PESO (kg)","TAXA (kg/h)","REPROCESSO (kg)","OBSERVAÇÃO","MÊS","SEMANA","% REPROC."]];
+    prod.forEach(r=>aoaP.push([fmtDate(r.dia),r.operacao,r.hora_ini,r.hora_fim,horasDec(r.hora_ini,r.hora_fim),horasFrac(r.hora_ini,r.hora_fim),r.codigo,r.descricao,r.categoria,r.familia,r.peso,taxa(r.peso,r.hora_ini,r.hora_fim),r.reprocesso,r.obs,mesKey(r.dia),semana(r.dia),pctReproc(r.peso,r.reprocesso)]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoaP),"03_PRODUCAO");
+    const par=STATE.prod_paradas.slice().sort((a,b)=>(a.dia||"").localeCompare(b.dia||""));
+    const aoaS=[["DIA","HORA INICIAL","HORA FINAL","OPERAÇÃO","HORAS (dec.)","HORAS (frac.)","TIPO DE PARADA","MOTIVO","DETALHE / CAUSA","OBSERVAÇÃO","MÊS"]];
+    par.forEach(r=>aoaS.push([fmtDate(r.dia),r.hora_ini,r.hora_fim,r.operacao,horasDec(r.hora_ini,r.hora_fim),horasFrac(r.hora_ini,r.hora_fim),r.tipo_parada,r.motivo,r.causa,r.obs,mesKey(r.dia)]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoaS),"04_PARADAS");
+    const aoaC=[["CÓD.","DESCRIÇÃO","PESO (kg)","CATEGORIA","FAMÍLIA"]];
+    STATE.prod_produtos.slice().sort((a,b)=>a.descricao.localeCompare(b.descricao)).forEach(p=>aoaC.push([p.codigo,p.descricao,p.peso,p.categoria,p.familia]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoaC),"Produtos");
+    const aoaL=[["CATEGORIA","VALOR"]];
+    Object.keys(CATLAB).forEach(cat=>STATE.prod_listas.filter(l=>l.categoria===cat).forEach(l=>aoaL.push([CATLAB[cat],l.valor])));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoaL),"Listas");
+    XLSX.writeFile(wb,`AGROMIX_Producao_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }catch(e){ console.error(e); toast("Erro ao exportar.","err"); }
+}
+
+/* ====================== BOOT ====================== */
+async function boot(){
+  $("#view").innerHTML=`<div class="empty">Carregando dados do Supabase…</div>`;
+  try{
+    const {error}=await sb.from("prod_produtos").select("codigo",{count:"exact",head:true});
+    if(error){ console.error("conexao",error); toast("Falha ao ler o Supabase. Rode o SQL de setup e confira URL/chave.","err"); }
+  }catch(e){ console.error("conexao",e); toast("Sem conexão com o Supabase. Confira URL e chave anon.","err"); }
+  const [pr,li,pd,pa]=await Promise.all([DB.load("prod_produtos"),DB.load("prod_listas"),DB.load("prod_producao"),DB.load("prod_paradas")]);
+  STATE.prod_produtos=pr; STATE.prod_listas=li; STATE.prod_producao=pd; STATE.prod_paradas=pa;
+  go("inicio");
+}
+window.doLogin=doLogin;window.logout=logout;window.go=go;window.toggleSidebar=toggleSidebar;window.closeModal=closeModal;
+window.formProducao=formProducao;window.prodFill=prodFill;window.prodCalc=prodCalc;window.saveProducao=saveProducao;
+window.formParada=formParada;window.parCalc=parCalc;window.saveParada=saveParada;
+window.formProduto=formProduto;window.saveProduto=saveProduto;window.delProduto=delProduto;
+window.addLista=addLista;window.delLista=delLista;window.delRec=delRec;window.exportExcel=exportExcel;window.renderProducao=renderProducao;window.renderParadas=renderParadas;window.renderCadastros=renderCadastros;
+</script>
+</body>
+</html>
