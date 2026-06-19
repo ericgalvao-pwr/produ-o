@@ -8,13 +8,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --bg:#f4f6f3; --surface:#ffffff; --surface-2:#f8faf7; --line:#e3e8e0;
-  --ink:#1c241b; --muted:#6b7768; --brand:#2f7d32; --brand-d:#22611f; --brand-l:#e7f2e6;
-  --amber:#e3a008; --amber-bg:#fdf3d7; --red:#d23b34; --red-bg:#fbe6e4; --blue:#2563a8; --blue-bg:#e4eefb;
-  --radius:12px; --shadow:0 1px 2px rgba(20,40,15,.06),0 6px 20px rgba(20,40,15,.05);
+  --bg:#f2f5f9; --surface:#ffffff; --surface-2:#f5f8fc; --line:#e1e7f0;
+  --ink:#16202f; --muted:#64748b;
+  --brand:#1f5fa6; --brand-d:#174b86; --brand-l:#e7effa;       /* azul */
+  --accent:#f4b400; --accent-d:#b07d05; --accent-l:#fdf4d2;    /* amarelo */
+  --red:#d23b34; --red-bg:#fbe6e4; --green:#2e9b5b; --green-bg:#e6f6ec;
+  --radius:12px; --shadow:0 1px 2px rgba(20,35,60,.06),0 6px 20px rgba(20,35,60,.05);
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
@@ -27,12 +30,10 @@ a{color:var(--brand-d)}
 
 /* ---------- LOGIN ---------- */
 #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;
-  background:radial-gradient(1200px 600px at 70% -10%,#dcebd9,transparent),var(--bg)}
-.login-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);
-  width:100%;max-width:380px;padding:32px}
-.brand{display:flex;align-items:center;gap:11px;margin-bottom:6px}
-.logo{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--brand),var(--brand-d));
-  display:grid;place-items:center;color:#fff;font-family:Archivo;font-weight:800;font-size:20px}
+  background:radial-gradient(1200px 600px at 70% -10%,#d7e6fa,transparent),var(--bg)}
+.login-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);width:100%;max-width:380px;padding:32px}
+.brand{display:flex;align-items:center;gap:11px}
+.logo{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--brand),var(--brand-d));display:grid;place-items:center;color:#fff;font-family:Archivo;font-weight:800;font-size:20px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
 .brand .t1{font-family:Archivo;font-weight:800;font-size:17px;letter-spacing:-.01em}
 .brand .t2{font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;font-weight:600}
 .login-card h2{font-size:19px;margin:18px 0 2px}
@@ -44,42 +45,51 @@ a{color:var(--brand-d)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-radius:9px;border:1px solid transparent;font-weight:600;font-size:14px;transition:.15s}
 .btn-primary{background:var(--brand);color:#fff}
 .btn-primary:hover{background:var(--brand-d)}
+.btn-accent{background:var(--accent);color:#3c2c02}
+.btn-accent:hover{background:var(--accent-d);color:#fff}
 .btn-ghost{background:var(--surface);border-color:var(--line);color:var(--ink)}
 .btn-ghost:hover{background:var(--surface-2)}
-.btn-danger{background:var(--red-bg);color:var(--red);border-color:#f3c9c6}
-.btn-danger:hover{background:#f8d8d6}
 .btn-block{width:100%}
-.btn-sm{padding:6px 11px;font-size:13px;border-radius:8px}
-.hint{margin-top:14px;font-size:12px;color:var(--muted);background:var(--surface-2);border:1px dashed var(--line);border-radius:9px;padding:9px 11px;text-align:center}
+.btn-sm{padding:7px 12px;font-size:13px;border-radius:8px}
+.hint{margin-top:14px;font-size:12px;color:var(--muted);background:var(--accent-l);border:1px dashed #ecd9a0;border-radius:9px;padding:9px 11px;text-align:center}
 
-/* ---------- APP SHELL ---------- */
-#app{display:none;min-height:100%}
-.shell{display:flex;min-height:100vh}
-.sidebar{width:236px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
-.sidebar .head{padding:18px 18px 14px;border-bottom:1px solid var(--line)}
-.nav{padding:12px 10px;flex:1;overflow:auto}
-.nav .group{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:12px 12px 6px}
-.nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;color:var(--ink);text-decoration:none;font-weight:500;margin-bottom:2px;cursor:pointer}
-.nav a:hover{background:var(--surface-2)}
-.nav a.active{background:var(--brand-l);color:var(--brand-d);font-weight:600}
-.nav a .ic{width:18px;text-align:center;font-size:15px}
-.sidebar .foot{padding:12px;border-top:1px solid var(--line)}
-.main{flex:1;min-width:0;display:flex;flex-direction:column}
-.topbar{height:60px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:sticky;top:0;z-index:5}
-.topbar .title{font-family:Archivo;font-weight:700;font-size:17px}
-.hamburger{display:none;background:none;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:16px}
+/* ---------- APP / TOPNAV ---------- */
+#app{display:none}
+.topstrip{height:4px;background:linear-gradient(90deg,var(--brand),var(--brand-d))}
+.topnav{display:flex;align-items:center;gap:18px;background:var(--surface);border-bottom:1px solid var(--line);padding:0 22px;height:62px;position:sticky;top:0;z-index:10}
+.tn-brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
+.tn-brand .t1{font-family:Archivo;font-weight:800;font-size:15px}
+.tn-brand .t2{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-weight:600}
+.tn-tabs{display:flex;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+.tn-tabs::-webkit-scrollbar{display:none}
+.tn-tabs a{padding:21px 14px;color:var(--muted);font-weight:600;font-size:13.5px;text-decoration:none;border-bottom:3px solid transparent;white-space:nowrap;cursor:pointer;letter-spacing:.02em}
+.tn-tabs a:hover{color:var(--ink)}
+.tn-tabs a.active{color:var(--brand-d);border-bottom-color:var(--accent)}
+.tn-actions{display:flex;gap:8px;flex-shrink:0}
 .content{padding:22px;max-width:1280px;width:100%;margin:0 auto}
 
-/* ---------- COMPONENTS ---------- */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:13px;margin-bottom:20px}
-.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;box-shadow:var(--shadow)}
+/* ---------- DASHBOARD ---------- */
+.dash-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.section-lab{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:18px 2px 12px}
+.dash-filter{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.dash-filter:focus{border-color:var(--brand);outline:none}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:13px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--brand);border-radius:var(--radius);padding:15px 16px;box-shadow:var(--shadow)}
+.kpi:nth-child(even){border-top-color:var(--accent)}
 .kpi .lab{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .kpi .val{font-family:Archivo;font-weight:800;font-size:25px;margin-top:5px;letter-spacing:-.02em}
 .kpi .val small{font-size:13px;font-weight:600;color:var(--muted)}
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chart-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px}
+.cc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.cc-head h3{font-size:15px}
+.cc-head .unit{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.chart-box{position:relative;height:290px}
+
+/* ---------- CARDS / TABLES ---------- */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px}
 .card .ch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .card .ch h3{font-size:16px}
-.card .cb{padding:6px 0}
 .toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
 .toolbar input,.toolbar select{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
 .toolbar input:focus,.toolbar select:focus{border-color:var(--brand);outline:none;background:#fff}
@@ -91,8 +101,8 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 tbody tr:hover{background:var(--surface-2)}
 td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
 .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600}
-.b-prog{background:var(--blue-bg);color:var(--blue)}
-.b-nprog{background:var(--amber-bg);color:#9a6c04}
+.b-prog{background:var(--brand-l);color:var(--brand-d)}
+.b-nprog{background:var(--accent-l);color:var(--accent-d)}
 .b-cat{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
 .row-actions{display:flex;gap:6px}
 .icon-btn{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:5px 8px;font-size:13px;color:var(--muted)}
@@ -102,10 +112,10 @@ td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
 .muted{color:var(--muted)}
 .tabs{display:flex;gap:6px;padding:0 18px;border-bottom:1px solid var(--line)}
 .tab{padding:11px 13px;border:none;background:none;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
-.tab.active{color:var(--brand-d);border-bottom-color:var(--brand)}
+.tab.active{color:var(--brand-d);border-bottom-color:var(--accent)}
 
 /* ---------- MODAL ---------- */
-.overlay{position:fixed;inset:0;background:rgba(20,30,15,.42);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow:auto}
+.overlay{position:fixed;inset:0;background:rgba(15,25,40,.45);display:none;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:50;overflow:auto}
 .overlay.show{display:flex}
 .modal{background:var(--surface);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);width:100%;max-width:620px;animation:pop .14s ease}
 @keyframes pop{from{transform:translateY(8px) scale(.99);opacity:.7}to{transform:none;opacity:1}}
@@ -116,7 +126,7 @@ td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
 .x{background:none;border:none;font-size:22px;color:var(--muted);line-height:1;padding:2px 6px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}
-.computed{background:var(--brand-l);border:1px solid #cfe3cd;border-radius:9px;padding:10px 13px;display:flex;gap:20px;flex-wrap:wrap;margin-top:4px}
+.computed{background:var(--brand-l);border:1px solid #cfe0f5;border-radius:9px;padding:10px 13px;display:flex;gap:20px;flex-wrap:wrap;margin-top:4px}
 .computed div{font-size:12px;color:var(--brand-d)}
 .computed b{font-family:'IBM Plex Mono',monospace;font-size:15px;display:block;color:var(--ink)}
 .full{grid-column:1/-1}
@@ -124,18 +134,12 @@ td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
 /* ---------- TOAST ---------- */
 #toasts{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:9px;z-index:100}
 .toast{background:var(--ink);color:#fff;padding:11px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:slide .2s ease}
-.toast.ok{background:var(--brand-d)}
+.toast.ok{background:var(--green)}
 .toast.err{background:var(--red)}
 @keyframes slide{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
 
-@media(max-width:860px){
-  .sidebar{position:fixed;z-index:40;left:0;top:0;transform:translateX(-100%);transition:.2s;box-shadow:var(--shadow)}
-  .sidebar.open{transform:none}
-  .hamburger{display:inline-block}
-  .grid2,.grid3{grid-template-columns:1fr}
-  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:35;display:none}
-  .scrim.show{display:block}
-}
+@media(max-width:900px){.dash-grid{grid-template-columns:1fr}.grid2,.grid3{grid-template-columns:1fr}}
+@media(max-width:680px){.tn-brand .tt{display:none}.content{padding:16px}}
 </style>
 </head>
 <body>
@@ -155,31 +159,21 @@ td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
 
 <!-- ============ APP ============ -->
 <div id="app">
-  <div class="shell">
-    <aside class="sidebar" id="sidebar">
-      <div class="head"><div class="brand"><div class="logo">A</div><div><div class="t1" style="font-size:15px">AGROMIX Rações</div><div class="t2">Produção</div></div></div></div>
-      <nav class="nav" id="nav">
-        <div class="group">Operação</div>
-        <a data-view="inicio"><span class="ic">📊</span> Início</a>
-        <a data-view="producao"><span class="ic">🏭</span> Produção</a>
-        <a data-view="paradas"><span class="ic">🛑</span> Paradas</a>
-        <div class="group">Base</div>
-        <a data-view="cadastros"><span class="ic">📦</span> Cadastros</a>
-      </nav>
-      <div class="foot"><button class="btn btn-ghost btn-block" onclick="logout()">↩ Sair</button></div>
-    </aside>
-    <div class="scrim" id="scrim" onclick="toggleSidebar(false)"></div>
-    <div class="main">
-      <div class="topbar">
-        <div style="display:flex;align-items:center;gap:12px">
-          <button class="hamburger" onclick="toggleSidebar()">☰</button>
-          <span class="title" id="viewTitle">Início</span>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="exportExcel()">⬇ Exportar Excel</button>
-      </div>
-      <div class="content" id="view"></div>
+  <div class="topstrip"></div>
+  <header class="topnav">
+    <div class="tn-brand"><div class="logo">A</div><div class="tt"><div class="t1">AGROMIX Rações</div><div class="t2">Produção</div></div></div>
+    <nav class="tn-tabs" id="nav">
+      <a data-view="dashboard">Dashboard</a>
+      <a data-view="producao">Produção</a>
+      <a data-view="paradas">Paradas</a>
+      <a data-view="cadastros">Cadastros</a>
+    </nav>
+    <div class="tn-actions">
+      <button class="btn btn-accent btn-sm" onclick="exportExcel()">⬇ Exportar</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
     </div>
-  </div>
+  </header>
+  <div class="content" id="view"></div>
 </div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
@@ -187,8 +181,8 @@ td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
 
 <script>
 /* ====================== CONFIG SUPABASE ======================
-   Mesmo projeto do app de absenteísmo. Só URL + chave ANON (pública).
-   NUNCA coloque a service_role aqui.                                  */
+   Mesmo projeto do app de absenteísmo, tabelas prod_ (separadas).
+   Só URL + chave ANON (pública). NUNCA a service_role aqui.          */
 const SUPABASE_URL      = "https://iwravbxhewlrdurodfnu.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3cmF2YnhoZXdscmR1cm9kZm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2NzM1MTcsImV4cCI6MjA5NzI0OTUxN30.tFVy0gVVt3rJhhXBOJBnan0kyqEx9zwhVYAzdqOXzBE";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -228,7 +222,7 @@ const DB = {
 };
 
 /* ====================== ESTADO ====================== */
-const STATE = {prod_produtos:[],prod_listas:[],prod_producao:[],prod_paradas:[],view:"inicio",fProdMes:"",fProdQ:"",fParMes:"",fParQ:"",cadTab:"produtos"};
+const STATE = {prod_produtos:[],prod_listas:[],prod_producao:[],prod_paradas:[],view:"dashboard",dashMes:"",fProdMes:"",fProdQ:"",fParMes:"",fParQ:"",cadTab:"produtos"};
 
 /* ====================== HELPERS ====================== */
 const $=s=>document.querySelector(s);
@@ -246,7 +240,7 @@ function listVals(cat){ return STATE.prod_listas.filter(l=>l.categoria===cat).ma
 function toast(msg,type=""){ const el=document.createElement("div"); el.className="toast "+type; el.textContent=msg; $("#toasts").appendChild(el); setTimeout(()=>el.remove(),3000); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function closeModal(){ $("#overlay").classList.remove("show"); $("#modal").innerHTML=""; }
-function toggleSidebar(force){ const o=force===undefined?!$("#sidebar").classList.contains("open"):force; $("#sidebar").classList.toggle("open",o); $("#scrim").classList.toggle("show",o); }
+function groupSum(arr,keyFn,valFn){ const m={}; arr.forEach(r=>{const k=keyFn(r); if(k===""||k==null)return; m[k]=(m[k]||0)+(valFn(r)||0);}); return m; }
 
 /* ====================== AUTH ====================== */
 async function doLogin(){
@@ -257,38 +251,95 @@ async function doLogin(){
 function logout(){ MEM.session=null; $("#app").style.display="none"; $("#login").style.display="flex"; $("#lg-pass").value=""; }
 
 /* ====================== NAV ====================== */
-const TITLES={inicio:"Início",producao:"Controle de Produção",paradas:"Controle de Paradas",cadastros:"Cadastros"};
-function go(v){ STATE.view=v; document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active",a.dataset.view===v)); $("#viewTitle").textContent=TITLES[v]; toggleSidebar(false); render(); }
+const TITLES={dashboard:"Dashboard",producao:"Produção",paradas:"Paradas",cadastros:"Cadastros"};
+function go(v){ STATE.view=v; document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active",a.dataset.view===v)); render(); }
 document.querySelectorAll("#nav a").forEach(a=>a.onclick=()=>go(a.dataset.view));
 
 /* ====================== RENDER ====================== */
 function render(){
-  if(STATE.view==="inicio")return renderInicio();
+  if(STATE.view==="dashboard")return renderDashboard();
   if(STATE.view==="producao")return renderProducao();
   if(STATE.view==="paradas")return renderParadas();
   if(STATE.view==="cadastros")return renderCadastros();
 }
 
-function renderInicio(){
-  const prod=STATE.prod_producao, par=STATE.prod_paradas;
+/* -------- DASHBOARD -------- */
+let _charts=[];
+function destroyCharts(){ _charts.forEach(c=>{try{c.destroy()}catch(e){}}); _charts=[]; }
+const BLUE="#1f5fa6", YEL="#f4b400";
+const PALETTE=["#1f5fa6","#f4b400","#4a86c5","#e0a200","#7fb0db","#b07d05","#2e9b5b","#9bbfe0","#d98a3d","#143c66"];
+function renderDashboard(){
+  destroyCharts();
+  let prod=STATE.prod_producao, par=STATE.prod_paradas;
+  const meses=[...new Set([...STATE.prod_producao,...STATE.prod_paradas].map(r=>mesKey(r.dia)).filter(Boolean))].sort();
+  if(STATE.dashMes){ prod=prod.filter(r=>mesKey(r.dia)===STATE.dashMes); par=par.filter(r=>mesKey(r.dia)===STATE.dashMes); }
   const totKg=prod.reduce((s,r)=>s+(+r.peso||0),0);
   const hProd=prod.reduce((s,r)=>s+(horasDec(r.hora_ini,r.hora_fim)||0),0);
   const hPar=par.reduce((s,r)=>s+(horasDec(r.hora_ini,r.hora_fim)||0),0);
   const tx=hProd>0?Math.round(totKg/hProd):0;
   const disp=(hProd+hPar)>0?(hProd/(hProd+hPar)*100):0;
+  const totRep=prod.reduce((s,r)=>s+(+r.reprocesso||0),0);
+  const pctRep=totKg>0?(totRep/totKg*100):0;
   $("#view").innerHTML=`
+    <div class="dash-bar">
+      <div class="section-lab" style="margin:0">Indicadores principais</div>
+      <select class="dash-filter" onchange="STATE.dashMes=this.value;renderDashboard()"><option value="">Todos os meses</option>${meses.slice().reverse().map(m=>`<option ${m===STATE.dashMes?"selected":""}>${m}</option>`).join("")}</select>
+    </div>
     <div class="kpis">
       <div class="kpi"><div class="lab">Produção total</div><div class="val">${nf(totKg)} <small>kg</small></div></div>
       <div class="kpi"><div class="lab">Horas produtivas</div><div class="val">${nf(hProd,1)} <small>h</small></div></div>
       <div class="kpi"><div class="lab">Taxa média</div><div class="val">${nf(tx)} <small>kg/h</small></div></div>
       <div class="kpi"><div class="lab">Horas paradas</div><div class="val">${nf(hPar,1)} <small>h</small></div></div>
       <div class="kpi"><div class="lab">Disponibilidade</div><div class="val">${nf(disp,1)}<small>%</small></div></div>
-      <div class="kpi"><div class="lab">Registros</div><div class="val">${prod.length}<small> prod · ${par.length} par</small></div></div>
+      <div class="kpi"><div class="lab">Reprocesso médio</div><div class="val">${nf(pctRep,2)}<small>%</small></div></div>
     </div>
-    <div class="card"><div class="ch"><h3>Últimas produções</h3><button class="btn btn-primary btn-sm" onclick="go('producao')">Ver todas →</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Peso (kg)</th><th class="num">Horas</th></tr></thead><tbody>
-      ${[...prod].sort((a,b)=>(b.dia||"").localeCompare(a.dia||"")).slice(0,6).map(r=>`<tr><td>${fmtDate(r.dia)}</td><td>${esc(r.operacao)}</td><td>${esc(r.descricao)}</td><td class="num">${nf(r.peso)}</td><td class="num">${nf(horasDec(r.hora_ini,r.hora_fim),1)}</td></tr>`).join("")||`<tr><td colspan="5" class="empty">Sem registros ainda.</td></tr>`}
-      </tbody></table></div></div>`;
+    <div class="section-lab">Análises</div>
+    <div class="dash-grid">
+      <div class="chart-card"><div class="cc-head"><h3>Produção por mês</h3><span class="unit">kg</span></div><div class="chart-box" id="box-mes"><canvas id="ch-mes"></canvas></div></div>
+      <div class="chart-card"><div class="cc-head"><h3>Pareto de paradas</h3><span class="unit">min · por motivo</span></div><div class="chart-box" id="box-par"><canvas id="ch-par"></canvas></div></div>
+      <div class="chart-card"><div class="cc-head"><h3>Tendência de produção</h3><span class="unit">kg · por dia</span></div><div class="chart-box" id="box-tend"><canvas id="ch-tend"></canvas></div></div>
+      <div class="chart-card"><div class="cc-head"><h3>Produção por categoria</h3><span class="unit">kg</span></div><div class="chart-box" id="box-cat"><canvas id="ch-cat"></canvas></div></div>
+    </div>`;
+  buildCharts(prod,par);
+}
+function noData(boxId){ const b=document.getElementById(boxId); if(b)b.innerHTML='<div class="empty">Sem dados no período</div>'; }
+function buildCharts(prod,par){
+  if(!window.Chart){ ["box-mes","box-par","box-tend","box-cat"].forEach(b=>{const e=document.getElementById(b);if(e)e.innerHTML='<div class="empty">Gráficos indisponíveis (sem internet?)</div>';}); return; }
+  const optBase={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
+  const fmtTick={ticks:{callback:v=>nf(v)}};
+  // Produção por mês
+  try{
+    const g=groupSum(prod,r=>mesKey(r.dia),r=>+r.peso||0); const labels=Object.keys(g).sort();
+    if(!labels.length)noData("box-mes"); else _charts.push(new Chart($("#ch-mes"),{type:"bar",
+      data:{labels,datasets:[{data:labels.map(k=>Math.round(g[k])),backgroundColor:BLUE,borderRadius:5,maxBarThickness:46}]},
+      options:{...optBase,scales:{y:{beginAtZero:true,...fmtTick}}}}));
+  }catch(e){console.error(e);noData("box-mes");}
+  // Pareto de paradas (minutos por motivo) + acumulado %
+  try{
+    const g=groupSum(par,r=>r.motivo||"—",r=>{const h=horasDec(r.hora_ini,r.hora_fim);return h==null?0:h*60;});
+    const ent=Object.entries(g).sort((a,b)=>b[1]-a[1]); const tot=ent.reduce((s,e)=>s+e[1],0);
+    if(!ent.length||tot===0)noData("box-par"); else{ let acc=0; const cum=ent.map(e=>{acc+=e[1];return Math.round(acc/tot*1000)/10;});
+      _charts.push(new Chart($("#ch-par"),{type:"bar",
+        data:{labels:ent.map(e=>e[0]),datasets:[
+          {label:"min",data:ent.map(e=>Math.round(e[1])),backgroundColor:YEL,borderRadius:4,order:2},
+          {label:"% acum.",data:cum,type:"line",borderColor:BLUE,backgroundColor:BLUE,yAxisID:"y1",tension:.3,pointRadius:3,order:1}]},
+        options:{...optBase,plugins:{legend:{display:true,labels:{boxWidth:12}}},scales:{y:{beginAtZero:true,title:{display:true,text:"min"}},y1:{position:"right",beginAtZero:true,max:100,grid:{drawOnChartArea:false},ticks:{callback:v=>v+"%"}}}}}));
+    }
+  }catch(e){console.error(e);noData("box-par");}
+  // Tendência de produção (kg por dia, últimos 25)
+  try{
+    const g=groupSum(prod,r=>r.dia,r=>+r.peso||0); const dias=Object.keys(g).sort().slice(-25);
+    if(!dias.length)noData("box-tend"); else _charts.push(new Chart($("#ch-tend"),{type:"line",
+      data:{labels:dias.map(fmtDate),datasets:[{data:dias.map(k=>Math.round(g[k])),borderColor:BLUE,backgroundColor:"rgba(31,95,166,.12)",fill:true,tension:.3,pointRadius:2}]},
+      options:{...optBase,scales:{y:{beginAtZero:true,...fmtTick}}}}));
+  }catch(e){console.error(e);noData("box-tend");}
+  // Produção por categoria (doughnut)
+  try{
+    const g=groupSum(prod,r=>r.categoria||"—",r=>+r.peso||0); const labels=Object.keys(g).sort((a,b)=>g[b]-g[a]);
+    if(!labels.length)noData("box-cat"); else _charts.push(new Chart($("#ch-cat"),{type:"doughnut",
+      data:{labels,datasets:[{data:labels.map(k=>Math.round(g[k])),backgroundColor:labels.map((_,i)=>PALETTE[i%PALETTE.length]),borderWidth:2,borderColor:"#fff"}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:"58%",plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:11}}}}}}));
+  }catch(e){console.error(e);noData("box-cat");}
 }
 
 /* -------- PRODUÇÃO -------- */
@@ -499,7 +550,7 @@ function renderCadListas(){
     return `<div class="card" style="box-shadow:none;margin-bottom:14px">
       <div class="ch"><h3 style="font-size:14px">${CATLAB[cat]} <span class="muted" style="font-weight:400">(${vals.length})</span></h3>
         <div class="toolbar"><input id="nl-${cat}" placeholder="adicionar…" style="min-width:170px" onkeydown="if(event.key==='Enter')addLista('${cat}')"><button class="btn btn-ghost btn-sm" onclick="addLista('${cat}')">+ Adicionar</button></div></div>
-      <div class="cb" style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
+      <div style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
         ${vals.map(l=>`<span class="badge b-cat" style="display:inline-flex;align-items:center;gap:7px;padding:5px 10px">${esc(l.valor)} <button class="x" style="font-size:15px;padding:0 2px" onclick="delLista('${esc(l.id)}')">×</button></span>`).join("")||`<span class="muted">Vazio</span>`}
       </div></div>`;
   }).join("")}</div>`;
@@ -553,13 +604,13 @@ async function boot(){
   }catch(e){ console.error("conexao",e); toast("Sem conexão com o Supabase. Confira URL e chave anon.","err"); }
   const [pr,li,pd,pa]=await Promise.all([DB.load("prod_produtos"),DB.load("prod_listas"),DB.load("prod_producao"),DB.load("prod_paradas")]);
   STATE.prod_produtos=pr; STATE.prod_listas=li; STATE.prod_producao=pd; STATE.prod_paradas=pa;
-  go("inicio");
+  go("dashboard");
 }
-window.doLogin=doLogin;window.logout=logout;window.go=go;window.toggleSidebar=toggleSidebar;window.closeModal=closeModal;
-window.formProducao=formProducao;window.prodFill=prodFill;window.prodCalc=prodCalc;window.saveProducao=saveProducao;
-window.formParada=formParada;window.parCalc=parCalc;window.saveParada=saveParada;
-window.formProduto=formProduto;window.saveProduto=saveProduto;window.delProduto=delProduto;
-window.addLista=addLista;window.delLista=delLista;window.delRec=delRec;window.exportExcel=exportExcel;window.renderProducao=renderProducao;window.renderParadas=renderParadas;window.renderCadastros=renderCadastros;
+window.doLogin=doLogin;window.logout=logout;window.go=go;window.closeModal=closeModal;window.renderDashboard=renderDashboard;
+window.formProducao=formProducao;window.prodFill=prodFill;window.prodCalc=prodCalc;window.saveProducao=saveProducao;window.renderProducao=renderProducao;
+window.formParada=formParada;window.parCalc=parCalc;window.saveParada=saveParada;window.renderParadas=renderParadas;
+window.formProduto=formProduto;window.saveProduto=saveProduto;window.delProduto=delProduto;window.renderCadastros=renderCadastros;
+window.addLista=addLista;window.delLista=delLista;window.delRec=delRec;window.exportExcel=exportExcel;
 </script>
 </body>
 </html>
