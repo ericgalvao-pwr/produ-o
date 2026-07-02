@@ -222,7 +222,7 @@ const DB = {
 };
 
 /* ====================== ESTADO ====================== */
-const STATE = {prod_produtos:[],prod_listas:[],prod_producao:[],prod_paradas:[],view:"dashboard",dashMes:"",fProdMes:"",fProdQ:"",fParMes:"",fParQ:"",cadTab:"produtos"};
+const STATE = {prod_produtos:[],prod_listas:[],prod_producao:[],prod_paradas:[],view:"dashboard",dashMes:"",dashOp:"",dashSku:"",dashDe:"",dashAte:"",fProdMes:"",fProdQ:"",fProdOp:"",fProdSku:"",fProdDe:"",fProdAte:"",fParMes:"",fParQ:"",fParOp:"",fParDe:"",fParAte:"",cadTab:"produtos"};
 
 /* ====================== HELPERS ====================== */
 const $=s=>document.querySelector(s);
@@ -241,6 +241,24 @@ function toast(msg,type=""){ const el=document.createElement("div"); el.classNam
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function closeModal(){ $("#overlay").classList.remove("show"); $("#modal").innerHTML=""; }
 function groupSum(arr,keyFn,valFn){ const m={}; arr.forEach(r=>{const k=keyFn(r); if(k===""||k==null)return; m[k]=(m[k]||0)+(valFn(r)||0);}); return m; }
+/* Deduplica peso/reprocesso por lote (dia+código): um produto que passa por várias
+   operações (moagem, embalagem, trituração…) é lançado 1x por operação, todas com o
+   peso do produto. Para NÃO multiplicar a produção, colapsamos cada (dia,código) em
+   uma linha, usando o MAIOR peso do grupo (peso do produto acabado). Mantemos a
+   categoria/família/descrição do registro de maior peso. Horas NÃO são deduplicadas
+   (cada operação consome tempo real) — este helper serve só para PESO e REPROCESSO.  */
+function dedupeProducao(arr){
+  const grp={};
+  arr.forEach(r=>{
+    const dia=r.dia||"", cod=r.codigo||("__"+(r.descricao||""));
+    const k=dia+"|"+cod;
+    const peso=+r.peso||0, rep=+r.reprocesso||0;
+    const g=grp[k];
+    if(!g){ grp[k]={dia:r.dia,codigo:r.codigo,descricao:r.descricao,categoria:r.categoria,familia:r.familia,peso,reprocesso:rep}; }
+    else if(peso>g.peso){ g.peso=peso; g.reprocesso=rep; g.descricao=r.descricao; g.categoria=r.categoria; g.familia=r.familia; }
+  });
+  return Object.values(grp);
+}
 
 /* ====================== AUTH ====================== */
 async function doLogin(){
@@ -271,19 +289,39 @@ const PALETTE=["#1f5fa6","#f4b400","#4a86c5","#e0a200","#7fb0db","#b07d05","#2e9
 function renderDashboard(){
   destroyCharts();
   let prod=STATE.prod_producao, par=STATE.prod_paradas;
+  // Opções dos filtros (derivadas de TODOS os dados, antes de filtrar)
   const meses=[...new Set([...STATE.prod_producao,...STATE.prod_paradas].map(r=>mesKey(r.dia)).filter(Boolean))].sort();
+  const ops=[...new Set(STATE.prod_producao.map(r=>r.operacao).filter(Boolean))].sort();
+  const skus=[...new Set(STATE.prod_producao.map(r=>r.descricao).filter(Boolean))].sort();
+  // --- FILTROS ---
   if(STATE.dashMes){ prod=prod.filter(r=>mesKey(r.dia)===STATE.dashMes); par=par.filter(r=>mesKey(r.dia)===STATE.dashMes); }
-  const totKg=prod.reduce((s,r)=>s+(+r.peso||0),0);
+  if(STATE.dashDe){ prod=prod.filter(r=>r.dia&&r.dia>=STATE.dashDe); par=par.filter(r=>r.dia&&r.dia>=STATE.dashDe); }
+  if(STATE.dashAte){ prod=prod.filter(r=>r.dia&&r.dia<=STATE.dashAte); par=par.filter(r=>r.dia&&r.dia<=STATE.dashAte); }
+  if(STATE.dashOp){ prod=prod.filter(r=>r.operacao===STATE.dashOp); par=par.filter(r=>r.operacao===STATE.dashOp); }
+  if(STATE.dashSku){ prod=prod.filter(r=>r.descricao===STATE.dashSku); }
+  // PESO: quando NENHUMA operação está selecionada, deduplica por (dia+código) para
+  // não multiplicar o peso pelo nº de operações. Com operação filtrada, já está
+  // isolado numa etapa, então usa as linhas direto.
+  const prodPeso = STATE.dashOp ? prod : dedupeProducao(prod);
+  const totKg=prodPeso.reduce((s,r)=>s+(+r.peso||0),0);
   const hProd=prod.reduce((s,r)=>s+(horasDec(r.hora_ini,r.hora_fim)||0),0);
   const hPar=par.reduce((s,r)=>s+(horasDec(r.hora_ini,r.hora_fim)||0),0);
   const tx=hProd>0?Math.round(totKg/hProd):0;
   const disp=(hProd+hPar)>0?(hProd/(hProd+hPar)*100):0;
-  const totRep=prod.reduce((s,r)=>s+(+r.reprocesso||0),0);
+  const totRep=prodPeso.reduce((s,r)=>s+(+r.reprocesso||0),0);
   const pctRep=totKg>0?(totRep/totKg*100):0;
+  const limpar=(STATE.dashMes||STATE.dashOp||STATE.dashSku||STATE.dashDe||STATE.dashAte)?`<button class="btn btn-ghost btn-sm" onclick="STATE.dashMes='';STATE.dashOp='';STATE.dashSku='';STATE.dashDe='';STATE.dashAte='';renderDashboard()">Limpar filtros</button>`:"";
   $("#view").innerHTML=`
     <div class="dash-bar">
       <div class="section-lab" style="margin:0">Indicadores principais</div>
-      <select class="dash-filter" onchange="STATE.dashMes=this.value;renderDashboard()"><option value="">Todos os meses</option>${meses.slice().reverse().map(m=>`<option ${m===STATE.dashMes?"selected":""}>${m}</option>`).join("")}</select>
+      <div class="toolbar">
+        <select class="dash-filter" onchange="STATE.dashMes=this.value;renderDashboard()"><option value="">Todos os meses</option>${meses.slice().reverse().map(m=>`<option ${m===STATE.dashMes?"selected":""}>${m}</option>`).join("")}</select>
+        <input class="dash-filter" type="date" title="De" value="${esc(STATE.dashDe)}" onchange="STATE.dashDe=this.value;renderDashboard()">
+        <input class="dash-filter" type="date" title="Até" value="${esc(STATE.dashAte)}" onchange="STATE.dashAte=this.value;renderDashboard()">
+        <select class="dash-filter" onchange="STATE.dashOp=this.value;renderDashboard()"><option value="">Todas as operações</option>${ops.map(o=>`<option ${o===STATE.dashOp?"selected":""}>${esc(o)}</option>`).join("")}</select>
+        <select class="dash-filter" onchange="STATE.dashSku=this.value;renderDashboard()"><option value="">Todos os SKUs</option>${skus.map(s=>`<option ${s===STATE.dashSku?"selected":""}>${esc(s)}</option>`).join("")}</select>
+        ${limpar}
+      </div>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="lab">Produção total</div><div class="val">${nf(totKg)} <small>kg</small></div></div>
@@ -300,9 +338,11 @@ function renderDashboard(){
       <div class="chart-card"><div class="cc-head"><h3>Tendência de produção</h3><span class="unit">kg · por dia</span></div><div class="chart-box" id="box-tend"><canvas id="ch-tend"></canvas></div></div>
       <div class="chart-card"><div class="cc-head"><h3>Produção por categoria</h3><span class="unit">kg</span></div><div class="chart-box" id="box-cat"><canvas id="ch-cat"></canvas></div></div>
     </div>`;
-  buildCharts(prod,par);
+  buildCharts(prodPeso,par);
 }
 function noData(boxId){ const b=document.getElementById(boxId); if(b)b.innerHTML='<div class="empty">Sem dados no período</div>'; }
+/* prod = base de PESO já deduplicada por lote (via dedupeProducao) ou filtrada por
+   operação. par = paradas filtradas. Os gráficos de peso somam 1 valor por lote.     */
 function buildCharts(prod,par){
   if(!window.Chart){ ["box-mes","box-par","box-tend","box-cat"].forEach(b=>{const e=document.getElementById(b);if(e)e.innerHTML='<div class="empty">Gráficos indisponíveis (sem internet?)</div>';}); return; }
   const optBase={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
@@ -346,8 +386,14 @@ function buildCharts(prod,par){
 function mesesDe(arr){ return [...new Set(arr.map(r=>mesKey(r.dia)).filter(Boolean))].sort().reverse(); }
 function renderProducao(){
   const meses=mesesDe(STATE.prod_producao);
+  const ops=[...new Set(STATE.prod_producao.map(r=>r.operacao).filter(Boolean))].sort();
+  const skus=[...new Set(STATE.prod_producao.map(r=>r.descricao).filter(Boolean))].sort();
   let rows=STATE.prod_producao.slice().sort((a,b)=>(b.dia||"").localeCompare(a.dia||"")||(b.hora_ini||"").localeCompare(a.hora_ini||""));
   if(STATE.fProdMes) rows=rows.filter(r=>mesKey(r.dia)===STATE.fProdMes);
+  if(STATE.fProdDe) rows=rows.filter(r=>r.dia&&r.dia>=STATE.fProdDe);
+  if(STATE.fProdAte) rows=rows.filter(r=>r.dia&&r.dia<=STATE.fProdAte);
+  if(STATE.fProdOp) rows=rows.filter(r=>r.operacao===STATE.fProdOp);
+  if(STATE.fProdSku) rows=rows.filter(r=>r.descricao===STATE.fProdSku);
   if(STATE.fProdQ){ const q=STATE.fProdQ.toLowerCase(); rows=rows.filter(r=>(r.descricao+" "+r.operacao+" "+r.codigo).toLowerCase().includes(q)); }
   $("#view").innerHTML=`
     <div class="card">
@@ -355,7 +401,12 @@ function renderProducao(){
         <h3>Produção diária <span class="muted" style="font-weight:400;font-size:13px">(${rows.length})</span></h3>
         <div class="toolbar">
           <select onchange="STATE.fProdMes=this.value;renderProducao()"><option value="">Todos os meses</option>${meses.map(m=>`<option ${m===STATE.fProdMes?"selected":""}>${m}</option>`).join("")}</select>
+          <input type="date" title="De" value="${esc(STATE.fProdDe)}" onchange="STATE.fProdDe=this.value;renderProducao()">
+          <input type="date" title="Até" value="${esc(STATE.fProdAte)}" onchange="STATE.fProdAte=this.value;renderProducao()">
+          <select onchange="STATE.fProdOp=this.value;renderProducao()"><option value="">Todas as operações</option>${ops.map(o=>`<option ${o===STATE.fProdOp?"selected":""}>${esc(o)}</option>`).join("")}</select>
+          <select onchange="STATE.fProdSku=this.value;renderProducao()"><option value="">Todos os SKUs</option>${skus.map(s=>`<option ${s===STATE.fProdSku?"selected":""}>${esc(s)}</option>`).join("")}</select>
           <input class="search" placeholder="Buscar produto/operação…" value="${esc(STATE.fProdQ)}" oninput="STATE.fProdQ=this.value;clearTimeout(window._t);window._t=setTimeout(renderProducao,200)">
+          ${(STATE.fProdMes||STATE.fProdDe||STATE.fProdAte||STATE.fProdOp||STATE.fProdSku||STATE.fProdQ)?`<button class="btn btn-ghost btn-sm" onclick="STATE.fProdMes='';STATE.fProdDe='';STATE.fProdAte='';STATE.fProdOp='';STATE.fProdSku='';STATE.fProdQ='';renderProducao()">Limpar</button>`:""}
           <button class="btn btn-primary btn-sm" onclick="formProducao()">+ Lançar produção</button>
         </div>
       </div>
@@ -426,8 +477,12 @@ async function saveProducao(id){
 /* -------- PARADAS -------- */
 function renderParadas(){
   const meses=mesesDe(STATE.prod_paradas);
+  const ops=[...new Set(STATE.prod_paradas.map(r=>r.operacao).filter(Boolean))].sort();
   let rows=STATE.prod_paradas.slice().sort((a,b)=>(b.dia||"").localeCompare(a.dia||"")||(b.hora_ini||"").localeCompare(a.hora_ini||""));
   if(STATE.fParMes) rows=rows.filter(r=>mesKey(r.dia)===STATE.fParMes);
+  if(STATE.fParDe) rows=rows.filter(r=>r.dia&&r.dia>=STATE.fParDe);
+  if(STATE.fParAte) rows=rows.filter(r=>r.dia&&r.dia<=STATE.fParAte);
+  if(STATE.fParOp) rows=rows.filter(r=>r.operacao===STATE.fParOp);
   if(STATE.fParQ){ const q=STATE.fParQ.toLowerCase(); rows=rows.filter(r=>(r.operacao+" "+r.motivo+" "+r.causa+" "+r.tipo_parada).toLowerCase().includes(q)); }
   $("#view").innerHTML=`
     <div class="card">
@@ -435,7 +490,11 @@ function renderParadas(){
         <h3>Paradas <span class="muted" style="font-weight:400;font-size:13px">(${rows.length})</span></h3>
         <div class="toolbar">
           <select onchange="STATE.fParMes=this.value;renderParadas()"><option value="">Todos os meses</option>${meses.map(m=>`<option ${m===STATE.fParMes?"selected":""}>${m}</option>`).join("")}</select>
+          <input type="date" title="De" value="${esc(STATE.fParDe)}" onchange="STATE.fParDe=this.value;renderParadas()">
+          <input type="date" title="Até" value="${esc(STATE.fParAte)}" onchange="STATE.fParAte=this.value;renderParadas()">
+          <select onchange="STATE.fParOp=this.value;renderParadas()"><option value="">Todas as operações</option>${ops.map(o=>`<option ${o===STATE.fParOp?"selected":""}>${esc(o)}</option>`).join("")}</select>
           <input class="search" placeholder="Buscar motivo/causa…" value="${esc(STATE.fParQ)}" oninput="STATE.fParQ=this.value;clearTimeout(window._t2);window._t2=setTimeout(renderParadas,200)">
+          ${(STATE.fParMes||STATE.fParDe||STATE.fParAte||STATE.fParOp||STATE.fParQ)?`<button class="btn btn-ghost btn-sm" onclick="STATE.fParMes='';STATE.fParDe='';STATE.fParAte='';STATE.fParOp='';STATE.fParQ='';renderParadas()">Limpar</button>`:""}
           <button class="btn btn-primary btn-sm" onclick="formParada()">+ Registrar parada</button>
         </div>
       </div>
