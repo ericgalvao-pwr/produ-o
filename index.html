@@ -169,12 +169,15 @@ td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace}
       <a data-view="cadastros">Cadastros</a>
     </nav>
     <div class="tn-actions">
+      <button class="btn btn-accent btn-sm" onclick="openImport()">⬆ Importar</button>
       <button class="btn btn-accent btn-sm" onclick="exportExcel()">⬇ Exportar</button>
       <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
     </div>
   </header>
   <div class="content" id="view"></div>
 </div>
+
+<input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none">
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div id="toasts"></div>
@@ -218,6 +221,16 @@ const DB = {
       const listStr="("+(keep.length?keep:["__none__"]).map(v=>JSON.stringify(v)).join(",")+")";
       const {error:de}=await sb.from(t).delete().not(pk,"in",listStr); if(de)console.error("del "+t,de);
     }catch(e){ console.error("save "+t,e); }
+  },
+  /* Só insere/atualiza (upsert). NUNCA deleta — usado pela importação (modo
+     mesclar), ao contrário de save() que apaga tudo que não está no array.   */
+  async upsertOnly(t,arr){
+    const pk=PK[t];
+    try{
+      const rows=(arr||[]).map(o=>toRow(t,o));
+      if(rows.length){ const {error}=await sb.from(t).upsert(rows,{onConflict:pk}); if(error){console.error("upsert "+t,error); return false;} }
+      return true;
+    }catch(e){ console.error("upsertOnly "+t,e); return false; }
   }
 };
 
@@ -632,6 +645,232 @@ async function delRec(table,id){
   toast("Registro excluído."); await DB.save(table,STATE[table]);
 }
 
+/* -------- IMPORTAÇÃO -------- */
+let _import=null; /* {producao,paradas,produtos,listas,ignoradas,csv} */
+
+/* normaliza cabeçalho: minúsculas, sem acento, sem pontuação/espaços extras */
+function normKey(s){
+  return String(s==null?"":s).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g," ").trim();
+}
+/* pega o valor de uma linha (objeto com chaves = cabeçalhos) tentando vários nomes */
+function pick(row,norm,...aliases){
+  for(const a of aliases){ const k=normKey(a); if(norm[k]!==undefined && norm[k]!=="") return norm[k]; }
+  return "";
+}
+/* cria índice {cabeçalho normalizado -> valor} a partir da linha crua */
+function normRow(row){ const o={}; Object.keys(row).forEach(k=>{o[normKey(k)]=row[k];}); return o; }
+
+/* Data: aceita dd/mm/aaaa, aaaa-mm-dd, e número serial do Excel -> aaaa-mm-dd */
+function parseDataBR(v){
+  if(v===""||v==null) return "";
+  if(typeof v==="number"){ // serial do Excel (base 1899-12-30)
+    const d=new Date(Math.round((v-25569)*86400*1000));
+    if(isNaN(d)) return "";
+    return d.toISOString().slice(0,10);
+  }
+  const s=String(v).trim();
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(m){ let y=m[3]; if(y.length===2)y="20"+y; return `${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`; }
+  return "";
+}
+/* Hora: aceita "hh:mm", "hh:mm:ss" e fração de dia do Excel -> "hh:mm" */
+function parseHora(v){
+  if(v===""||v==null) return "";
+  if(typeof v==="number"){ const tot=Math.round(v*1440); return `${String(Math.floor(tot/60)%24).padStart(2,"0")}:${String(tot%60).padStart(2,"0")}`; }
+  const m=String(v).trim().match(/^(\d{1,2}):(\d{2})/); return m?`${m[1].padStart(2,"0")}:${m[2]}`:"";
+}
+function parseNum(v){ if(v===""||v==null)return ""; const n=+String(v).replace(/\./g,"").replace(",",".").replace(/[^0-9.\-]/g,""); return isNaN(n)?"":n; }
+function parseNumSimple(v){ if(v===""||v==null)return ""; const n=+String(v).replace(",","."); return isNaN(n)?"":n; }
+
+function mapRowProducao(row){
+  const n=normRow(row);
+  const dia=parseDataBR(pick(row,n,"dia","data"));
+  if(!dia) return null;
+  return {id:uid(),dia,
+    operacao:String(pick(row,n,"operacao")||"").trim(),
+    hora_ini:parseHora(pick(row,n,"hora inicial","hora ini","inicio","início")),
+    hora_fim:parseHora(pick(row,n,"hora final","hora fim","fim")),
+    codigo:String(pick(row,n,"codigo","cod")||"").trim(),
+    descricao:String(pick(row,n,"descricao","produto")||"").trim(),
+    categoria:String(pick(row,n,"categoria")||"").trim(),
+    familia:String(pick(row,n,"familia")||"").trim(),
+    peso:parseNum(pick(row,n,"peso kg","peso")),
+    reprocesso:parseNum(pick(row,n,"reprocesso kg","reprocesso")),
+    obs:String(pick(row,n,"observacao","obs")||"").trim()};
+}
+function mapRowParadas(row){
+  const n=normRow(row);
+  const dia=parseDataBR(pick(row,n,"dia","data"));
+  if(!dia) return null;
+  return {id:uid(),dia,
+    hora_ini:parseHora(pick(row,n,"hora inicial","hora ini","inicio","início")),
+    hora_fim:parseHora(pick(row,n,"hora final","hora fim","fim")),
+    operacao:String(pick(row,n,"operacao")||"").trim(),
+    tipo_parada:String(pick(row,n,"tipo de parada","tipo parada","tipo")||"").trim(),
+    motivo:String(pick(row,n,"motivo")||"").trim(),
+    causa:String(pick(row,n,"detalhe causa","detalhe","causa")||"").trim(),
+    obs:String(pick(row,n,"observacao","obs")||"").trim()};
+}
+function mapRowProduto(row){
+  const n=normRow(row);
+  const codigo=String(pick(row,n,"cod","codigo")||"").trim();
+  if(!codigo) return null;
+  return {codigo,
+    descricao:String(pick(row,n,"descricao","produto")||"").trim(),
+    peso:parseNum(pick(row,n,"peso kg","peso")),
+    categoria:String(pick(row,n,"categoria")||"").trim(),
+    familia:String(pick(row,n,"familia")||"").trim()};
+}
+/* rótulos do Exportar -> chave interna; também aceita a chave crua */
+const CATLAB_REV=(()=>{ const m={}; Object.keys(CATLAB).forEach(k=>{m[normKey(CATLAB[k])]=k; m[normKey(k)]=k;}); return m; })();
+function mapRowLista(row){
+  const n=normRow(row);
+  const catRaw=String(pick(row,n,"categoria")||"").trim();
+  const valor=String(pick(row,n,"valor")||"").trim();
+  const cat=CATLAB_REV[normKey(catRaw)];
+  if(!cat||!valor) return null;
+  return {id:cat+"|"+valor,categoria:cat,valor};
+}
+
+function openImport(){ const el=$("#import-file"); el.value=""; el.click(); }
+
+function sheetToRows(wb,name){
+  const ws=wb.Sheets[name]; if(!ws) return [];
+  return XLSX.utils.sheet_to_json(ws,{defval:"",raw:true});
+}
+/* acha aba pelo nome tolerante (03_PRODUCAO, producao, etc.) */
+function findSheet(wb,...aliases){
+  const want=aliases.map(normKey);
+  return wb.SheetNames.find(nm=>{ const k=normKey(nm); return want.some(w=>k.includes(w)); });
+}
+
+function handleImportFile(file){
+  if(!file) return;
+  if(!window.XLSX){ toast("Biblioteca de leitura indisponível (sem internet?).","err"); return; }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:"array"});
+      const isCsv=/\.csv$/i.test(file.name);
+      const parsed={producao:[],paradas:[],produtos:[],listas:[],ignoradas:0,csv:isCsv,file:file.name};
+      if(isCsv){
+        // CSV = 1 tabela; guarda as linhas cruas e pede o tipo na tela
+        parsed.csvRows=sheetToRows(wb,wb.SheetNames[0]);
+        parsed.csvTipo="";
+      }else{
+        const nP=findSheet(wb,"producao","03 producao"), nS=findSheet(wb,"paradas","04 paradas"),
+              nProd=findSheet(wb,"produtos"), nL=findSheet(wb,"listas");
+        if(nP)    applyRows(parsed,"producao", sheetToRows(wb,nP).map(mapRowProducao));
+        if(nS)    applyRows(parsed,"paradas",  sheetToRows(wb,nS).map(mapRowParadas));
+        if(nProd) applyRows(parsed,"produtos", sheetToRows(wb,nProd).map(mapRowProduto));
+        if(nL)    applyRows(parsed,"listas",   sheetToRows(wb,nL).map(mapRowLista));
+      }
+      _import=parsed;
+      previewImport();
+    }catch(err){ console.error(err); toast("Não foi possível ler o arquivo.","err"); }
+  };
+  reader.onerror=()=>toast("Erro ao ler o arquivo.","err");
+  reader.readAsArrayBuffer(file);
+}
+function applyRows(parsed,tipo,mapped){
+  const ok=mapped.filter(Boolean);
+  parsed.ignoradas+=(mapped.length-ok.length);
+  parsed[tipo]=ok;
+}
+/* aplica o tipo escolhido às linhas do CSV */
+function setImportCsvTipo(tipo){
+  if(!_import||!_import.csv) return;
+  const map={producao:mapRowProducao,paradas:mapRowParadas,produtos:mapRowProduto,listas:mapRowLista};
+  _import.producao=[];_import.paradas=[];_import.produtos=[];_import.listas=[];_import.ignoradas=0;
+  _import.csvTipo=tipo;
+  if(tipo&&map[tipo]) applyRows(_import,tipo,(_import.csvRows||[]).map(map[tipo]));
+  previewImport();
+}
+
+function previewImport(){
+  const p=_import; if(!p) return;
+  const tot=p.producao.length+p.paradas.length+p.produtos.length+p.listas.length;
+  const linha=(lab,n,extra="")=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)"><span>${lab}${extra}</span><b class="mono">${n}</b></div>`;
+  let corpo="";
+  if(p.csv){
+    const opts=[["","— selecione o tipo —"],["producao","Produção"],["paradas","Paradas"],["produtos","Produtos"],["listas","Listas operacionais"]];
+    corpo=`
+      <p class="muted" style="margin:0 0 12px">Arquivo CSV contém uma única tabela. Indique de qual tipo é:</p>
+      <div class="field"><label>Tipo de dados</label>
+        <select id="imp-csv-tipo" onchange="setImportCsvTipo(this.value)">
+          ${opts.map(o=>`<option value="${o[0]}" ${o[0]===p.csvTipo?"selected":""}>${o[1]}</option>`).join("")}
+        </select></div>`;
+    if(p.csvTipo){
+      const mapLab={producao:"Produções",paradas:"Paradas",produtos:"Produtos",listas:"Itens de lista"};
+      corpo+=`<div style="margin-top:6px">${linha(mapLab[p.csvTipo],p[p.csvTipo].length)}</div>`;
+    }
+  }else{
+    corpo=`<div>
+      ${linha("Produções",p.producao.length)}
+      ${linha("Paradas",p.paradas.length)}
+      ${linha("Produtos (cadastro)",p.produtos.length)}
+      ${linha("Itens de lista operacional",p.listas.length)}
+    </div>`;
+  }
+  const alerta=p.ignoradas>0?`<div class="hint" style="background:var(--red-bg);border-color:#f3c9c6;color:var(--red)">${p.ignoradas} linha(s) ignorada(s) por falta de dados obrigatórios (ex.: data ou código).</div>`:"";
+  const info=`<div class="computed" style="margin-top:14px"><div>Produção e Paradas são <b style="display:inline">acrescentadas</b> (podem duplicar se reimportar). Produtos e Listas são <b style="display:inline">atualizados</b> por chave.</div></div>`;
+  const podeImportar=tot>0;
+  $("#modal").innerHTML=`
+    <div class="mh"><h3>Importar dados</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <p class="muted" style="margin:0 0 12px">Arquivo: <b style="color:var(--ink)">${esc(p.file)}</b></p>
+      ${corpo}
+      ${alerta}
+      ${podeImportar?info:'<div class="hint">Nenhum registro válido encontrado para importar.</div>'}
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      ${podeImportar?`<button class="btn btn-primary" onclick="confirmImport()">Confirmar importação</button>`:""}
+    </div>`;
+  $("#overlay").classList.add("show");
+}
+
+async function confirmImport(){
+  const p=_import; if(!p) return;
+  const btn=$("#modal .btn-primary"); if(btn){ btn.disabled=true; btn.textContent="Importando…"; }
+  let msgs=[]; let algumErro=false;
+  try{
+    if(p.produtos.length){
+      const byCod={}; STATE.prod_produtos.forEach(x=>byCod[x.codigo]=x);
+      p.produtos.forEach(x=>byCod[x.codigo]=x);          // upsert por código
+      STATE.prod_produtos=Object.values(byCod);
+      const ok=await DB.upsertOnly("prod_produtos",p.produtos); algumErro=algumErro||!ok;
+      msgs.push(`${p.produtos.length} produto(s)`);
+    }
+    if(p.listas.length){
+      const byId={}; STATE.prod_listas.forEach(x=>byId[x.id]=x);
+      p.listas.forEach(x=>byId[x.id]=x);                 // dedup por categoria|valor
+      STATE.prod_listas=Object.values(byId);
+      const ok=await DB.upsertOnly("prod_listas",p.listas); algumErro=algumErro||!ok;
+      msgs.push(`${p.listas.length} item(ns) de lista`);
+    }
+    if(p.producao.length){
+      STATE.prod_producao=STATE.prod_producao.concat(p.producao);   // append
+      const ok=await DB.upsertOnly("prod_producao",p.producao); algumErro=algumErro||!ok;
+      msgs.push(`${p.producao.length} produção(ões)`);
+    }
+    if(p.paradas.length){
+      STATE.prod_paradas=STATE.prod_paradas.concat(p.paradas);      // append
+      const ok=await DB.upsertOnly("prod_paradas",p.paradas); algumErro=algumErro||!ok;
+      msgs.push(`${p.paradas.length} parada(s)`);
+    }
+    _import=null; closeModal(); render();
+    if(algumErro) toast("Importado com avisos — parte pode não ter salvo no servidor. Veja o console.","err");
+    else toast("Importado: "+msgs.join(", ")+".","ok");
+  }catch(e){
+    console.error(e); toast("Erro ao importar.","err");
+    if(btn){ btn.disabled=false; btn.textContent="Confirmar importação"; }
+  }
+}
+
 /* -------- EXPORT EXCEL -------- */
 function exportExcel(){
   try{
@@ -670,6 +909,8 @@ window.formProducao=formProducao;window.prodFill=prodFill;window.prodCalc=prodCa
 window.formParada=formParada;window.parCalc=parCalc;window.saveParada=saveParada;window.renderParadas=renderParadas;
 window.formProduto=formProduto;window.saveProduto=saveProduto;window.delProduto=delProduto;window.renderCadastros=renderCadastros;
 window.addLista=addLista;window.delLista=delLista;window.delRec=delRec;window.exportExcel=exportExcel;
+window.openImport=openImport;window.setImportCsvTipo=setImportCsvTipo;window.confirmImport=confirmImport;
+document.getElementById("import-file").addEventListener("change",function(e){ handleImportFile(e.target.files[0]); });
 </script>
 </body>
 </html>
